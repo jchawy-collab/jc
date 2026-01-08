@@ -1,0 +1,7 @@
+{
+  "name": "Copy of jcScribe AI",
+  "description": "A sophisticated audio transcription and intelligence platform that extracts key insights, action items, and structured data from recordings using Gemini 3.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
