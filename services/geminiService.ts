@@ -6,21 +6,21 @@ export class GeminiService {
   private ai: GoogleGenAI;
 
   constructor() {
-    // Initialized with the direct process.env.API_KEY as per instructions.
     this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
 
   async processAudio(base64Audio: string, mimeType: string, fileName: string): Promise<{ fullText: string; insights: ExtractedData }> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const model = "gemini-3-flash-preview";
 
-    // 1. Get Transcription & Initial Analysis
-    const transcriptionResponse = await this.ai.models.generateContent({
+    // 1. Verbatim Transcription
+    const transcriptionResponse = await ai.models.generateContent({
       model,
       contents: [
         {
           parts: [
             { inlineData: { data: base64Audio, mimeType } },
-            { text: `Please provide a verbatim transcription of this audio. Also, identify if this is a business call. Filename: ${fileName}` }
+            { text: `Transcribe this audio verbatim. Mark [Connection Tone], [Disconnection Tone], [Hold Music], [Noticeable Delay], [IVR Prompt], and [Pre-recorded Message] in brackets where they occur. Filename provided: ${fileName}` }
           ]
         }
       ]
@@ -28,24 +28,23 @@ export class GeminiService {
 
     const fullText = transcriptionResponse.text || "No transcription available.";
 
-    // 2. Extract Structured Data with specific lead-gen focus
-    const extractionResponse = await this.ai.models.generateContent({
+    // 2. Structured Extraction
+    const extractionResponse = await ai.models.generateContent({
       model,
       contents: [
         {
           parts: [
-            { text: `You are an expert Call Quality Auditor. Analyze the following transcription and file metadata. 
-            Extract detailed business information into the specified JSON format.
+            { inlineData: { data: base64Audio, mimeType } },
+            { text: `Analyze the transcript, audio, and the filename: "${fileName}".
             
-            Context:
-            - Filename: ${fileName}
-            - Transcription: ${fullText}
+            EXTREMELY IMPORTANT:
+            1. Extract 'callerContact' (Phone Number), 'callDateTime' (Date/Time), and 'companyName' by first analyzing the FILENAME string. 
+            2. High-Level Summary: Provide a concise 2-3 sentence narrative in the 'summary' field explaining the purpose of the call and the outcome.
+            3. Detailed Notes: Populate 'structuredNotes' with 4 specific points covering identity, the offer details, contact info mentioned, and entity relations.
+            4. Determine 'dncStatusDescription': "Opted Out" if DNC/Opt-out was requested, else "Opted In".
+            5. Detect 'isAutoAgent' (Bot/IVR), 'hasHoldMusic', 'agentMentionedAutoDialer'.
             
-            Rules:
-            - Extract 'callDateTime' from the conversation if mentioned, or infer it from the filename.
-            - 'dncRequested' is true if the client asks to be removed from the list or not to be called again.
-            - 'isAutoAgent' is true if the initial speaker is an automated system or AI.
-            - 'isTransferred' is true if the call moves from one agent/system to another person.` }
+            Contextual Transcript: ${fullText}` }
           ]
         }
       ],
@@ -54,37 +53,47 @@ export class GeminiService {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            summary: { type: Type.STRING },
+            summary: { type: Type.STRING, description: "Concise narrative summary of the call." },
+            structuredNotes: { type: Type.ARRAY, items: { type: Type.STRING } },
             keyTopics: { type: Type.ARRAY, items: { type: Type.STRING } },
             actionItems: { type: Type.ARRAY, items: { type: Type.STRING } },
             speakers: { type: Type.ARRAY, items: { type: Type.STRING } },
             sentiment: { type: Type.STRING },
-            companyName: { type: Type.STRING, description: "Name of the business representing the caller." },
-            callerName: { type: Type.STRING, description: "Name of the person who initiated or is handling the call." },
-            offeredProduct: { type: Type.STRING, description: "The specific product or service being discussed or offered." },
-            callerContact: { type: Type.STRING, description: "Caller's phone, email, or office address." },
-            clientContact: { type: Type.STRING, description: "The client/customer's email or physical address." },
-            dncRequested: { type: Type.BOOLEAN, description: "True if 'Do Not Call' was requested." },
-            isAutoAgent: { type: Type.BOOLEAN, description: "True if an automated agent/bot was detected." },
-            isTransferred: { type: Type.BOOLEAN, description: "True if the call was transferred to another person." },
-            callDateTime: { type: Type.STRING, description: "Date and time of the call extracted from context." }
+            companyName: { type: Type.STRING },
+            callerName: { type: Type.STRING },
+            offeredProduct: { type: Type.STRING },
+            callerContact: { type: Type.STRING },
+            clientContact: { type: Type.STRING },
+            dncRequested: { type: Type.BOOLEAN },
+            dncStatusDescription: { type: Type.STRING },
+            entityRelations: { type: Type.STRING },
+            isAutoAgent: { type: Type.BOOLEAN },
+            isTransferred: { type: Type.BOOLEAN },
+            callDateTime: { type: Type.STRING },
+            callDirection: { type: Type.STRING },
+            audioSignatures: { type: Type.ARRAY, items: { type: Type.STRING } },
+            automationScore: { type: Type.INTEGER },
+            technicalNotes: { type: Type.STRING },
+            wasDisconnected: { type: Type.BOOLEAN },
+            hasHoldMusic: { type: Type.BOOLEAN },
+            agentMentionedAutoDialer: { type: Type.BOOLEAN }
           },
           required: [
-            "summary", "keyTopics", "actionItems", "speakers", "sentiment", 
-            "companyName", "callerName", "offeredProduct", "callerContact", 
-            "clientContact", "dncRequested", "isAutoAgent", "isTransferred", "callDateTime"
+            "summary", "companyName", "callerName", "offeredProduct", "callerContact", "clientContact", 
+            "dncRequested", "dncStatusDescription", "entityRelations", "isAutoAgent", "isTransferred", 
+            "callDateTime", "callDirection", "audioSignatures", "automationScore", "technicalNotes", 
+            "wasDisconnected", "hasHoldMusic", "agentMentionedAutoDialer"
           ]
         }
       }
     });
 
     try {
-      // Accessing the .text property directly as per Gemini API guidelines.
       const insights = JSON.parse(extractionResponse.text || "{}") as ExtractedData;
       return { fullText, insights };
     } catch (error) {
-      console.error("Failed to parse JSON insights:", error);
-      throw new Error("Failed to extract structured lead data from transcription.");
+      console.error("Extraction Parse Error:", error);
+      throw new Error("Failed to extract structured intelligence.");
     }
   }
 }

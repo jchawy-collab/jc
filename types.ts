@@ -1,21 +1,38 @@
 
 export interface ExtractedData {
   summary: string;
+  structuredNotes: string[]; 
   keyTopics: string[];
   actionItems: string[];
   speakers: string[];
   sentiment: 'Positive' | 'Neutral' | 'Negative';
   
-  // Specific Extraction Fields
+  // Lead Generation Fields
   companyName: string;
   callerName: string;
   offeredProduct: string;
-  callerContact: string; // Phone/Email/Address
-  clientContact: string; // Email/Physical Address
-  dncRequested: boolean; // Do Not Call
+  callerContact: string;
+  clientContact: string;
+  dncRequested: boolean; // Also used for DNC Status
+  dncStatusDescription: string; // "Opted In" or "Opted Out"
+  entityRelations: string; // Description of other companies and relationships
+  
   isAutoAgent: boolean;
   isTransferred: boolean;
   callDateTime: string;
+
+  // Technical Call Signatures
+  callDirection: 'Inbound' | 'Outbound' | 'Unknown';
+  audioSignatures: string[]; 
+  automationScore: number; 
+  technicalNotes: string;
+  
+  // Call Termination
+  wasDisconnected: boolean; 
+  
+  // Technical Audio Detection
+  hasHoldMusic: boolean; 
+  agentMentionedAutoDialer: boolean;
 }
 
 export interface TranscriptionResult {
