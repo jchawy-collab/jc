@@ -3,24 +3,34 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractedData } from "../types";
 
 export class GeminiService {
-  private ai: GoogleGenAI;
-
-  constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  }
+  constructor() {}
 
   async processAudio(base64Audio: string, mimeType: string, fileName: string): Promise<{ fullText: string; insights: ExtractedData }> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-3-pro-preview";
 
-    // 1. Verbatim Transcription
+    // 1. Verbatim Transcription with ATDS Marker Detection
     const transcriptionResponse = await ai.models.generateContent({
       model,
       contents: [
         {
           parts: [
             { inlineData: { data: base64Audio, mimeType } },
-            { text: `Transcribe this audio verbatim. Mark [Connection Tone], [Disconnection Tone], [Hold Music], [Noticeable Delay], [IVR Prompt], and [Pre-recorded Message] in brackets where they occur. Filename provided: ${fileName}` }
+            { 
+              text: `TASK: Provide a verbatim transcript. 
+              
+              TECHNICAL AUDIT: Identify these specific ATDS (Automated Telephone Dialing System) markers:
+              - [Hold Music]: Background music while waiting.
+              - [Pre-recorded Message]: Automated voice playing a message.
+              - [Noticeable Delay]: A gap of 2+ seconds of silence before the agent speaks (Dead Air/Connection Lag).
+              - [Connection Tone]: A beep or tone immediately when the call connects.
+              - [Disconnection Tone]: A beep or tone when the call ends.
+              
+              If you hear a sustained rhythmic 'beep-beep' engaged tone, label as [Signal: Verified Busy Signal]. 
+              Otherwise, if it's a standard call, use [Signal: Clear Connection].
+              
+              Filename: ${fileName}` 
+            }
           ]
         }
       ]
@@ -28,23 +38,26 @@ export class GeminiService {
 
     const fullText = transcriptionResponse.text || "No transcription available.";
 
-    // 2. Structured Extraction
+    // 2. Structured Extraction for ATDS Evidence
     const extractionResponse = await ai.models.generateContent({
       model,
       contents: [
         {
           parts: [
             { inlineData: { data: base64Audio, mimeType } },
-            { text: `Analyze the transcript, audio, and the filename: "${fileName}".
+            { text: `Analyze the audio and this transcript: "${fullText}".
             
-            EXTREMELY IMPORTANT:
-            1. Extract 'callerContact' (Phone Number), 'callDateTime' (Date/Time), and 'companyName' by first analyzing the FILENAME string. 
-            2. High-Level Summary: Provide a concise 2-3 sentence narrative in the 'summary' field explaining the purpose of the call and the outcome.
-            3. Detailed Notes: Populate 'structuredNotes' with 4 specific points covering identity, the offer details, contact info mentioned, and entity relations.
-            4. Determine 'dncStatusDescription': "Opted Out" if DNC/Opt-out was requested, else "Opted In".
-            5. Detect 'isAutoAgent' (Bot/IVR), 'hasHoldMusic', 'agentMentionedAutoDialer'.
+            ATDS IDENTIFIER RULES:
+            Populate 'atdsIdentifiers' array ONLY with markers clearly heard:
+            - "Hold Music"
+            - "Pre-recorded Message"
+            - "Noticeable Delay"
+            - "Connection Tone"
+            - "Disconnection Tone"
             
-            Contextual Transcript: ${fullText}` }
+            If none are present, return an empty array. Do not guess.
+            
+            Also extract standard lead data.` }
           ]
         }
       ],
@@ -53,7 +66,7 @@ export class GeminiService {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            summary: { type: Type.STRING, description: "Concise narrative summary of the call." },
+            summary: { type: Type.STRING },
             structuredNotes: { type: Type.ARRAY, items: { type: Type.STRING } },
             keyTopics: { type: Type.ARRAY, items: { type: Type.STRING } },
             actionItems: { type: Type.ARRAY, items: { type: Type.STRING } },
@@ -63,26 +76,32 @@ export class GeminiService {
             callerName: { type: Type.STRING },
             offeredProduct: { type: Type.STRING },
             callerContact: { type: Type.STRING },
+            callerEmail: { type: Type.STRING },
             clientContact: { type: Type.STRING },
             dncRequested: { type: Type.BOOLEAN },
             dncStatusDescription: { type: Type.STRING },
             entityRelations: { type: Type.STRING },
+            keyQuotes: { type: Type.ARRAY, items: { type: Type.STRING } },
             isAutoAgent: { type: Type.BOOLEAN },
             isTransferred: { type: Type.BOOLEAN },
             callDateTime: { type: Type.STRING },
             callDirection: { type: Type.STRING },
             audioSignatures: { type: Type.ARRAY, items: { type: Type.STRING } },
+            atdsIdentifiers: { type: Type.ARRAY, items: { type: Type.STRING } },
             automationScore: { type: Type.INTEGER },
             technicalNotes: { type: Type.STRING },
             wasDisconnected: { type: Type.BOOLEAN },
+            isBusySignal: { type: Type.BOOLEAN },
+            isBlankCall: { type: Type.BOOLEAN },
+            signalStatus: { type: Type.STRING },
             hasHoldMusic: { type: Type.BOOLEAN },
             agentMentionedAutoDialer: { type: Type.BOOLEAN }
           },
           required: [
-            "summary", "companyName", "callerName", "offeredProduct", "callerContact", "clientContact", 
-            "dncRequested", "dncStatusDescription", "entityRelations", "isAutoAgent", "isTransferred", 
-            "callDateTime", "callDirection", "audioSignatures", "automationScore", "technicalNotes", 
-            "wasDisconnected", "hasHoldMusic", "agentMentionedAutoDialer"
+            "summary", "companyName", "callerName", "offeredProduct", "callerContact", "callerEmail", "clientContact", 
+            "dncRequested", "dncStatusDescription", "entityRelations", "keyQuotes", "isAutoAgent", "isTransferred", 
+            "callDateTime", "callDirection", "audioSignatures", "atdsIdentifiers", "automationScore", "technicalNotes", 
+            "wasDisconnected", "isBusySignal", "isBlankCall", "signalStatus", "hasHoldMusic", "agentMentionedAutoDialer"
           ]
         }
       }

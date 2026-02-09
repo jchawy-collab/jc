@@ -11,12 +11,16 @@ export interface ExtractedData {
   companyName: string;
   callerName: string;
   offeredProduct: string;
-  callerContact: string;
-  clientContact: string;
-  dncRequested: boolean; // Also used for DNC Status
-  dncStatusDescription: string; // "Opted In" or "Opted Out"
-  entityRelations: string; // Description of other companies and relationships
+  callerContact: string; // Phone number
+  callerEmail: string; // Email address
+  clientContact: string; // Generic other contact info
+  dncRequested: boolean; 
+  dncStatusDescription: string; 
+  entityRelations: string; 
   
+  // Verbatim Grounding
+  keyQuotes: string[]; // Verbatim significant excerpts
+
   isAutoAgent: boolean;
   isTransferred: boolean;
   callDateTime: string;
@@ -24,11 +28,15 @@ export interface ExtractedData {
   // Technical Call Signatures
   callDirection: 'Inbound' | 'Outbound' | 'Unknown';
   audioSignatures: string[]; 
+  atdsIdentifiers: string[]; // Specific ATDS markers: "Hold Music", "Pre-recorded Message", "Noticeable Delay", "Connection Tone", "Disconnection Tone"
   automationScore: number; 
   technicalNotes: string;
   
-  // Call Termination
+  // Call Termination & Status
   wasDisconnected: boolean; 
+  isBusySignal: boolean;
+  isBlankCall: boolean;
+  signalStatus: string; 
   
   // Technical Audio Detection
   hasHoldMusic: boolean; 
